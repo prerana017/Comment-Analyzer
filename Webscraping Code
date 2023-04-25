@@ -1,0 +1,57 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+class GlassdoorScraper:
+    def __init__(self, company):
+        self.company = company
+        self.base_url = f'https://www.glassdoor.com/Reviews/{company}-Reviews-E6036.htm'
+        self.reviews = []
+
+    def scrape(self):
+        page = 1
+        while True:
+            url = self.base_url + f'?page={page}'
+            response = requests.get(url)
+
+            if response.status_code != 200:
+                break
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            reviews = soup.find_all('li', {'class': 'empReview'})
+
+            if not reviews:
+                break
+
+            for review in reviews:
+                title = review.find('span', {'class': 'summary'}).text.strip()
+                date = review.find('time')['datetime'].strip()
+                pros = review.find('p', {'class': 'pros'}).text.strip()
+                cons = review.find('p', {'class': 'cons'}).text.strip()
+                overall_rating = review.find('span', {'class': 'value-title'})['title'].strip()
+                work_life_rating = review.find('span', {'class': 'gdBars gdRatings med '})['title'].strip()
+                culture_rating = review.find_all('span', {'class': 'gdBars gdRatings med '})[1]['title'].strip()
+                career_rating = review.find_all('span', {'class': 'gdBars gdRatings med '})[2]['title'].strip()
+
+                self.reviews.append({
+                    'Title': title,
+                    'Date': date,
+                    'Pros': pros,
+                    'Cons': cons,
+                    'Overall Rating': overall_rating,
+                    'Work-Life Rating': work_life_rating,
+                    'Culture Rating': culture_rating,
+                    'Career Rating': career_rating
+                })
+
+            page += 1
+
+    def save_to_csv(self, filename):
+        df = pd.DataFrame(self.reviews)
+        df.to_csv(filename, index=False)
+
+if __name__ == '__main__':
+    company = 'Amazon'
+    scraper = GlassdoorScraper(company)
+    scraper.scrape()
+    scraper.save_to_csv(f'{company}_employee_reviews.csv')
