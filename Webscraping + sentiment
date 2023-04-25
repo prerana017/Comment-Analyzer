@@ -1,0 +1,51 @@
+import requests
+from bs4 import BeautifulSoup
+from textblob import TextBlob
+
+company = 'Amazon'
+base_url = f'https://www.glassdoor.com/Reviews/{company}-Reviews-E6036.htm'
+
+reviews = []
+positive_reviews = 0
+negative_reviews = 0
+
+for page in range(1, 6):
+    url = base_url + f'?page={page}'
+    response = requests.get(url)
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    review_list = soup.find_all('li', {'class': 'empReview'})
+
+    for review in review_list:
+        title = review.find('span', {'class': 'summary'}).text.strip()
+        date = review.find('time')['datetime'].strip()
+        pros = review.find('p', {'class': 'pros'}).text.strip()
+        cons = review.find('p', {'class': 'cons'}).text.strip()
+        overall_rating = review.find('span', {'class': 'value-title'})['title'].strip()
+        work_life_rating = review.find('span', {'class': 'gdBars gdRatings med '})['title'].strip()
+        culture_rating = review.find_all('span', {'class': 'gdBars gdRatings med '})[1]['title'].strip()
+        career_rating = review.find_all('span', {'class': 'gdBars gdRatings med '})[2]['title'].strip()
+
+        review_text = title + ' ' + pros + ' ' + cons
+        review_sentiment = TextBlob(review_text).sentiment.polarity
+
+        if review_sentiment >= 0:
+            positive_reviews += 1
+        else:
+            negative_reviews += 1
+
+        reviews.append({
+            'Title': title,
+            'Date': date,
+            'Pros': pros,
+            'Cons': cons,
+            'Overall Rating': overall_rating,
+            'Work-Life Rating': work_life_rating,
+            'Culture Rating': culture_rating,
+            'Career Rating': career_rating,
+            'Sentiment': review_sentiment
+        })
+
+print(f'Total reviews: {len(reviews)}')
+print(f'Positive reviews: {positive_reviews}')
+print(f'Negative reviews: {negative_reviews}')
