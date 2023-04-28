@@ -1,0 +1,130 @@
+import os
+from bs4 import BeautifulSoup 
+import urllib
+from urllib.request import Request
+import time
+import pandas as pd
+from lxml import html
+import re
+import requests
+
+base_url = "https://www.glassdoor.co.in"
+hdr = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+
+company_list = ['Phillips-66','Valero-Energy-Reviews','Boeing','Citi', 'Apple', 'Bank-of-America', 'Dell', 'Facebook', 'Ford', 'General-Motors', 'HP', 'JPMorgan-Chase', 'Marriott', 'Microsoft']
+url_specific_list = ['E498821', 'E704', 'E102', 'E8843', 'E1138', 'E8874', 'E1327', 'E40772', 'E263', 'E279', 'E1093161', 'E145', 'E7790', 'E1651']
+
+def build_url2(url, company_name, url_specific):
+    return url + '/Reviews/' + company_name + '-Reviews-' + url_specific + '.htm'
+
+# running the below for each company one by one 
+k=2 #will have to change everytime code runs for different company; can also run the loop over all companies but it is time consuming
+comp = company_list[k]
+url_sp = url_specific_list[k]
+print(comp)
+review_url = build_url2(base_url,comp,url_sp)
+print(review_url)
+bool = True
+
+review_df = pd.DataFrame()
+review_rating, review_title,reviewer_job, reviewer_location, review_text, pro_review_text, con_review_text, review_date, next_url= [],[],[],[],[],[],[],[],[]
+#review_url = 'https://www.glassdoor.co.in/Reviews/Microsoft-Reviews-E1651_P728.htm'
+l=0
+m=0
+
+print(review_url)
+
+while(bool):
+    try:
+        print(review_url)
+        url = urllib.request.urlopen(Request(review_url,headers=hdr))
+        soup = BeautifulSoup(url,"lxml")
+        containers=soup.findAll('div',{'class':'hreview'})
+        print(len(containers))
+        
+        if len(containers) == 0:
+            soup = BeautifulSoup(url,"html.parser")
+            containers=soup.findAll('div',{'class':'hreview'})
+            print(len(containers))
+        if len(containers) > 0:
+            m=0
+        if len(containers) == 0:
+            m=m+1
+            itr = int(review_url[review_url.find('_P')+2:review_url.rfind('.htm')])
+            review_url = re.sub('_P'+str(itr), '_P'+str(itr+1), review_url)
+            if m<=10:
+                continue
+            else:
+                bool=False
+                print('no containers')
+        for c in containers:
+            try:
+                review_title.append(c.find('a', {'class': 'reviewLink'}).text)
+            except:
+                review_title.append('NA')
+            try:
+                review_rating.append(c.find('span', {'class': 'value-title'})['title'])
+            except:
+                review_rating.append('NA')
+            try:
+                reviewer_job.append(c.find('span', {'class': 'authorJobTitle middle reviewer'}).text)
+            except:
+                reviewer_job.append('NA')
+            try:
+                reviewer_location.append(c.find('span', {'class': 'authorLocation'}).text)
+            except:
+                reviewer_location.append('NA')
+            try:
+                review_text.append(c.find('p', {'class': 'mainText mb-0'}).text)
+            except:
+                review_text.append('NA')
+            try:
+                pro_review_text.append(re.sub('Pros', '', c.findAll('div', {'class': 'v2__EIReviewDetailsV2__fullWidth v2__EIReviewDetailsV2__clickable'})[0].text))
+            except:
+                try:
+                    pro_review_text.append(re.sub('Pros', '', c.findAll('div', {'class': 'v2__EIReviewDetailsV2__fullWidth'})[0].text))
+                except:
+                    try:
+                        pro_review_text.append(re.sub('Pros', '', c.findAll('div', {'class': 'mt-md common__EiReviewTextStyles__allowLineBreaks'})[0].text))
+                    except:
+                        pro_review_text.append('NA')
+            try:
+                con_review_text.append(re.sub('Cons', '', c.findAll('div', {'class': 'v2__EIReviewDetailsV2__fullWidth v2__EIReviewDetailsV2__clickable'})[1].text))
+            except:
+                try:
+                    con_review_text.append(re.sub('Cons', '', c.findAll('div', {'class': 'v2__EIReviewDetailsV2__fullWidth'})[1].text))
+                except:
+                    try:
+                        con_review_text.append(re.sub('Cons', '', c.findAll('div', {'class': 'mt-md common__EiReviewTextStyles__allowLineBreaks'})[1].text))
+                    except:
+                        con_review_text.append('NA')
+            try:
+                review_date.append(c.find('time', {'class': 'date subtle small'}).text)
+            except:
+                review_date.append('NA')
+            next_url.append(review_url)
+        next_page = soup.findAll('a',{'class':'pagination__ArrowStyle__nextArrow'})
+        if len(next_page) == 0:
+            bool=False
+            print('no next page found')
+        else: review_url = base_url + next_page[0]['href']
+        time.sleep(30)
+    except:
+        l=l+1
+        print('thrown exception')
+        if l<=5:
+            continue
+        else:
+            bool=False
+            print('under exception')
+    
+
+df = pd.DataFrame(list(zip(review_rating, review_title,reviewer_job, reviewer_location, review_text, pro_review_text, con_review_text, review_date,next_url)))
+df.columns=['Review_Rating', 'Review_Title', 'Job_Title', 'Job_Location', 'Review_Text', 'Pro_Review', 'Con_Review', 'Date_of_Review','URL']
+df['Company'] = comp
+review_df = review_df.append(df)
+columns_without_url=df.columns.values.tolist()
+columns_without_url.remove("URL")
+review_df = review_df.drop_duplicates(subset=columns_without_url)
+review_df.to_excel(os.getcwd() + r'\glassdoor_review_' + comp+'.xlsx', index=False)
+
