@@ -1,0 +1,153 @@
+
+# coding: utf-8
+
+# In[1]:
+
+
+from bs4 import BeautifulSoup 
+import urllib
+import time
+import pandas as pd
+#from lxml import html
+import os
+
+
+# In[2]:
+
+
+base_url = "http://www.indeed.com"
+
+company_list = ['The-Home-Depot','Boeing', 'Wells-Fargo']
+
+
+def build_url(url, company_name):
+    return url + '/cmp/' + company_name + '/reviews?fcountry=ALL&start=21600'
+
+
+# In[8]:
+    
+# running the below for each company one by one 
+k=0 #will have to change everytime code runs for different company; can also run the loop over all companies but it is time consuming
+while k<len(company_list):
+    comp = company_list[k]
+    print(comp)
+    review_url = build_url(base_url,comp)
+    print(review_url)
+    bool = True
+    i=4
+    
+    
+    # In[17]:
+    
+    review_df = pd.DataFrame()
+    review_rating, review_title,reviewer_job, reviewer_location, review_text, pro_review_text, con_review_text, review_date, former, next_url= [],[],[],[],[],[],[],[],[],[]
+    #review_url = 'http://www.indeed.com/cmp/JPMorgan-Chase/reviews?fcountry=ALL&start=10020'
+    l=0
+    m=0
+    page_count=0
+    print(review_url)
+    
+    
+    # In[18]:
+    
+    while(bool):
+        
+        try:
+            print(review_url)
+            url = urllib.request.urlopen(review_url)
+            soup = BeautifulSoup(url,"lxml")
+     
+            containers=soup.find_all('div',{'class':'cmp-Review-container'})
+            print(len(containers))
+            if len(containers) == 0:
+                m=m+1
+                if m<=10:
+                    continue
+                else:
+                    bool=False
+                    print('no containers')
+                    print(j)
+            for c in containers:
+                try:
+                    review_rating.append(c.find('div', {'class': 'cmp-ReviewRating-text'}).text)
+                except:
+                    review_rating.append('NA')
+                try:
+                    review_title.append(c.find('div', {'class': 'cmp-Review-title'}).text)
+                except:
+                    review_title.append('NA')
+                try:
+                    reviewer_job.append(c.find('span', {'class':'cmp-ReviewAuthor'}).contents[1].text)
+                    former.append(c.find('span', {'class':'cmp-ReviewAuthor'}).contents[4])
+                    i=4
+                except:
+                    try:
+                       reviewer_job.append(c.find('span', {'class':'cmp-ReviewAuthor'}).contents[1])
+                       former.append(c.find('span', {'class':'cmp-ReviewAuthor'}).contents[5])
+                       i=5
+                    except:
+                       reviewer_job.append('NA')
+                       former.append('NA')
+                try:
+                    reviewer_location.append(c.find('span', {'class':'cmp-ReviewAuthor'}).contents[i+3].text)
+                except:
+                    try:
+                       reviewer_location.append(c.find('span', {'class':'cmp-ReviewAuthor'}).contents[i+4])
+                    except:
+                        reviewer_location.append('NA')
+                try:
+                    review_text.append(c.find('div', {'class':'cmp-Review-text'}).text)
+                except:
+                    review_text.append('NA')
+                try:
+                    pro_review_text.append(c.find('div', {'class':'cmp-ReviewProsCons-prosText'}).text)
+                except:
+                    pro_review_text.append('NA')
+                try:
+                    con_review_text.append(c.find('div', {'class':'cmp-ReviewProsCons-consText'}).text)
+                except:
+                    con_review_text.append('NA')
+                try:
+                    review_date.append(c.find('span', {'class':'cmp-ReviewAuthor'}).contents[-1])
+                except:
+                    review_date.append('NA')
+                next_url.append(review_url)
+            next_page = soup.findAll('a',{'data-tn-element':'next-page'})
+            if len(next_page) == 0:
+                bool=False
+                print('no next page found')
+                print(j)
+            else: review_url = base_url + next_page[0]['href']
+            time.sleep(30)
+            page_count=page_count+1
+        except:
+            l=l+1
+            print('thrown exception')
+            if l<=100:
+                continue
+            else:
+                bool=False
+                print('under exception')
+                print(j)
+        if(page_count%100==0):
+            df = pd.DataFrame(list(zip(review_rating, review_title,reviewer_job, reviewer_location, review_text, pro_review_text, con_review_text, review_date, former,next_url)))
+            df.columns=['Review_Rating', 'Review_Title', 'Job_Title', 'Job_Location', 'Review_Text', 'Pro_Review', 'Con_Review', 'Date_of_Review', 'Former_employee','URL']
+            df['Company'] = comp
+            review_df = review_df.append(df)
+            columns_without_url=df.columns.values.tolist()
+            columns_without_url.remove("URL")
+            review_df = review_df.drop_duplicates(subset=columns_without_url)
+            review_df.to_excel(os.getcwd() + "\\intermediate_"+ comp+'.xlsx', index=False)
+    
+    # In[19]:
+    
+    
+    df = pd.DataFrame(list(zip(review_rating, review_title,reviewer_job, reviewer_location, review_text, pro_review_text, con_review_text, review_date, former,next_url)))
+    df.columns=['Review_Rating', 'Review_Title', 'Job_Title', 'Job_Location', 'Review_Text', 'Pro_Review', 'Con_Review', 'Date_of_Review', 'Former_employee','URL']
+    df['Company'] = comp
+    review_df = review_df.append(df)
+    columns_without_url=df.columns.values.tolist()
+    columns_without_url.remove("URL")
+    review_df = review_df.drop_duplicates(subset=columns_without_url)
+    review_df.to_excel(os.getcwd() + "\\"+ comp+'.xlsx', index=False)
+    k=k+1
